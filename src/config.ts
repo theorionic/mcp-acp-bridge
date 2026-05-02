@@ -10,22 +10,22 @@ export const PRECONFIGURED_AGENTS: Record<string, AgentConfig> = {
     args: ["--acp"],
   },
   "claude-code": {
-    command: "npx",
-    args: ["-y", "@zed-industries/claude-code-acp"],
+    command: "claude-code-acp",
+    args: [],
   },
-  opencode: {
+  "opencode": {
     command: "opencode",
-    args: ["acp"],
+    args: ["--acp"],
   },
-  codex: {
-    command: "codex-acp",
-    args: [],
+  "codex": {
+    command: "codex",
+    args: ["--acp"],
   },
-  pi: {
-    command: "pi-acp",
-    args: [],
+  "pi": {
+    command: "pi",
+    args: ["--acp"],
   },
-  aider: {
+  "aider": {
     command: "aider",
     args: ["--acp"],
   },
