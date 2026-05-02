@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Runtime (Bun preferred)
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+        continue-on-error: true
+
+      - name: Setup Node.js (Fallback)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: |
+          if command -v bun > /dev/null; then
+            bun install
+          else
+            npm install
+          fi
+
+      - name: Build
+        run: |
+          if command -v bun > /dev/null; then
+            bun run build
+          else
+            npm run build
+          fi
+
+      - name: Publish to NPM
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/**

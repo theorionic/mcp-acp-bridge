@@ -1,11 +1,34 @@
 {
-  "name": "acp-gemini-chat",
-  "version": "1.0.0",
-  "description": "Interactive CLI chat with Gemini via ACP provider",
+  "name": "@theorionic/mcp-acp-bridge",
+  "version": "1.1.0",
+  "description": "A stateful Model Context Protocol (MCP) server that acts as a bridge to interact with Agent Client Protocol (ACP) agents.",
   "type": "module",
-  "scripts": {
-    "start": "bun run src/index.ts"
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-acp-bridge": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir dist --target node --minify --sourcemap && sed -i '1i#!/usr/bin/env node' dist/index.js && chmod +x dist/index.js",
+    "start": "if [ -f dist/index.js ]; then node dist/index.js; elif command -v bun > /dev/null; then bun run src/index.ts; else npx tsx src/index.ts; fi",
+    "dev": "bun run src/index.ts",
+    "prepublishOnly": "bun run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/theorionic/mcp-acp-bridge.git"
+  },
+  "keywords": [
+    "mcp",
+    "acp",
+    "gemini",
+    "agent-client-protocol",
+    "model-context-protocol"
+  ],
+  "author": "theorionic",
+  "license": "Apache-2.0",
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -15,5 +38,8 @@
     "@types/node": "^25.6.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

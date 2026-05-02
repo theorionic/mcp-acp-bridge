@@ -12,20 +12,40 @@ A Model Context Protocol (MCP) server that provides a bridge to interact with an
 
 ## Installation
 
-Ensure you have [Bun](https://bun.sh/) installed.
+### From NPM (Global)
 
 ```bash
+npm install -g @theorionic/mcp-acp-bridge
+```
+
+### From Source
+
+The project prefers [Bun](https://bun.sh/) but will fall back to NPM/Node if Bun is not present.
+
+```bash
+# If you have Bun
 bun install
+bun run build
+
+# Or using NPM
+npm install
+npm run build
 ```
 
 ## Usage
 
 ### Running the Server
 
-The server runs over standard input/output (stdio), making it compatible with any MCP client.
+If installed globally via NPM:
 
 ```bash
-bun run src/index.ts
+mcp-acp-bridge
+```
+
+From source (automatically detects Bun or Node):
+
+```bash
+npm start
 ```
 
 ### MCP Tools
