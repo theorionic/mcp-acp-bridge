@@ -1,0 +1,19 @@
+{
+  "name": "acp-gemini-chat",
+  "version": "1.0.0",
+  "description": "Interactive CLI chat with Gemini via ACP provider",
+  "type": "module",
+  "scripts": {
+    "start": "bun run index.ts"
+  },
+  "dependencies": {
+    "@agentclientprotocol/sdk": "^0.21.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}
