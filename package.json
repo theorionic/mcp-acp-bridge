@@ -4,7 +4,7 @@
   "description": "Interactive CLI chat with Gemini via ACP provider",
   "type": "module",
   "scripts": {
-    "start": "bun run index.ts"
+    "start": "bun run src/index.ts"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.0",
