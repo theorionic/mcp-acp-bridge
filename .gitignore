@@ -1,5 +1,8 @@
 node_modules/
+dist/
 dist.js
+src/index.js
+src/index.js.map
 .DS_Store
 *.log
 .gemini/
