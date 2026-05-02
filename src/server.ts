@@ -109,12 +109,14 @@ export class ACPServer {
 
       try {
         if (name === "initialize_client") {
-          const { agent, cwd = process.cwd(), env, authMethodId } = args as any;
+          const { agent, cwd, env, authMethodId } = args as any;
 
           const config = PRECONFIGURED_AGENTS[agent];
           if (!config) {
              throw new Error(`Agent '${agent}' is not preconfigured. Available agents: ${Object.keys(PRECONFIGURED_AGENTS).join(", ")}`);
           }
+
+          const finalCwd = cwd || config.defaultCwd || process.cwd();
 
           if (this.childProcess) {
             this.childProcess.kill();
@@ -124,7 +126,7 @@ export class ACPServer {
           const spawnEnv = { ...process.env, ...(env || {}) };
 
           this.childProcess = spawn(config.command, config.args, {
-            cwd,
+            cwd: finalCwd,
             env: spawnEnv,
             stdio: ["pipe", "pipe", "inherit"],
           });
@@ -147,7 +149,7 @@ export class ACPServer {
           }
 
           const sessionResponse = await this.connection.newSession({
-            cwd,
+            cwd: finalCwd,
             mcpServers: []
           });
 
