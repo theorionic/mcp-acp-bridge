@@ -1,6 +1,6 @@
 # mcp-acp-bridge
 
-A Model Context Protocol (MCP) server that provides a bridge to interact with any Agent Client Protocol (ACP) compatible agent (like Gemini CLI, Claude Code, etc.) through a stateful tool-based interface.
+A Model Context Protocol (MCP) server that provides a bridge to interact with any Agent Client Protocol (ACP) compatible agent (like Gemini CLI, Claude Code, OpenCode, Codex, Pi, Aider, etc.) through a stateful tool-based interface.
 
 ## Features
 
@@ -30,6 +30,80 @@ bun run build
 # Or using NPM
 npm install
 npm run build
+```
+
+## Supported Agents & Configuration
+
+The bridge comes preconfigured with several popular AI agents. Below is a guide on how to add this MCP server to different environments and the required setup for each agent.
+
+### 1. General MCP Configuration
+
+To use this bridge in your IDE (like Zed, Cursor, or VS Code with an MCP extension), add it to your configuration file:
+
+```json
+{
+  "mcpServers": {
+    "acp-bridge": {
+      "command": "npx",
+      "args": ["-y", "@theorionic/mcp-acp-bridge"]
+    }
+  }
+}
+```
+
+### 2. Preconfigured Agent Details
+
+When calling `initialize_client`, use the following `agent` keys:
+
+| Agent Key | Command Used | Requirements / Setup |
+|-----------|--------------|----------------------|
+| `gemini` | `gemini --acp` | Install Gemini CLI: `npm install -g @google/gemini-cli` |
+| `claude-code` | `npx -y @zed-industries/claude-code-acp` | Requires `claude` CLI installed and authenticated. |
+| `opencode` | `opencode acp` | Install OpenCode: `npm install -g opencode` |
+| `codex` | `codex-acp` | Install Codex ACP: `cargo install codex-acp` or use `npx @zed-industries/codex-acp` |
+| `pi` | `pi-acp` | Install Pi: See [pi-acp](https://github.com/theorionic/pi-acp) |
+| `aider` | `aider --acp` | Install Aider: `pip install aider-chat` (ensure version supports `--acp`) |
+
+### 3. Adding to Specific AI Agents
+
+#### Gemini CLI
+Add to `~/.gemini/settings.json`:
+```json
+{
+  "mcpServers": {
+    "acp-bridge": {
+      "command": "npx",
+      "args": ["-y", "@theorionic/mcp-acp-bridge"]
+    }
+  }
+}
+```
+
+#### Claude (Desktop/Web)
+Currently, custom MCP servers are primarily supported in the Claude Desktop app. Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+```json
+{
+  "mcpServers": {
+    "acp-bridge": {
+      "command": "npx",
+      "args": ["-y", "@theorionic/mcp-acp-bridge"]
+    }
+  }
+}
+```
+
+#### Zed Editor
+Add to `~/.config/zed/settings.json`:
+```json
+{
+  "context_servers": [
+    {
+      "name": "acp-bridge",
+      "command": "npx",
+      "args": ["-y", "@theorionic/mcp-acp-bridge"]
+    }
+  ]
+}
 ```
 
 ## Usage
