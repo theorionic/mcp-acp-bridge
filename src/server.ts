@@ -6,24 +6,28 @@ import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION, SessionId } from 
 import { PRECONFIGURED_AGENTS } from "./config.js";
 import { ACPClientHandler } from "./client.js";
 
+interface ACPConnectionState {
+  connectionId: string;
+  agentName: string;
+  cwd: string;
+  childProcess: ChildProcess;
+  connection: ClientSideConnection;
+  sessionId: SessionId;
+  clientHandler: ACPClientHandler;
+  isGenerating: boolean;
+  currentError: string | null;
+  generatePromise: Promise<void> | null;
+}
+
 export class ACPServer {
   public server: Server;
-  
-  private childProcess: ChildProcess | null = null;
-  private connection: ClientSideConnection | null = null;
-  private currentSessionId: SessionId | null = null;
-  
-  private clientHandler: ACPClientHandler;
-  private isGenerating = false;
-  private currentError: string | null = null;
-  private generatePromise: Promise<void> | null = null;
+  private connections = new Map<string, ACPConnectionState>();
 
   constructor() {
-    this.clientHandler = new ACPClientHandler();
     this.server = new Server(
       {
-        name: "acp-mcp-server",
-        version: "1.0.0",
+        name: "mcp-acp-bridge",
+        version: "1.1.0",
       },
       {
         capabilities: {
@@ -43,7 +47,7 @@ export class ACPServer {
         tools: [
           {
             name: "initialize_client",
-            description: "Initialize the ACP client using a preconfigured agent.",
+            description: "Initialize a new ACP connection using a preconfigured agent.",
             inputSchema: {
               type: "object",
               properties: {
@@ -51,6 +55,10 @@ export class ACPServer {
                   type: "string",
                   description: `The preconfigured agent to connect to (e.g., ${agentKeys}).`,
                   enum: Object.keys(PRECONFIGURED_AGENTS)
+                },
+                connectionId: {
+                  type: "string",
+                  description: "Unique identifier for this connection. If already exists, the old one will be replaced.",
                 },
                 cwd: {
                   type: "string",
@@ -66,38 +74,69 @@ export class ACPServer {
                   description: "Auth method ID (e.g., oauth-personal).",
                 },
               },
-              required: ["agent"],
+              required: ["agent", "connectionId"],
             },
           },
           {
             name: "send_prompt",
-            description: "Send a prompt to the connected agent. Starts generation in the background.",
+            description: "Send a prompt to a specific connected agent.",
             inputSchema: {
               type: "object",
               properties: {
+                connectionId: {
+                  type: "string",
+                  description: "The ID of the connection to use.",
+                },
                 prompt: {
                   type: "string",
                   description: "The message to send to the agent.",
                 },
                 wait: {
                   type: "boolean",
-                  description: "If true, waits until the full response is generated before returning. If false, returns immediately with the current buffer.",
+                  description: "If true, waits until the full response is generated before returning.",
                 },
               },
-              required: ["prompt"],
+              required: ["connectionId", "prompt"],
             },
           },
           {
             name: "read_response",
-            description: "Read the current response from the agent.",
+            description: "Read the current response from a specific agent.",
             inputSchema: {
               type: "object",
               properties: {
+                connectionId: {
+                  type: "string",
+                  description: "The ID of the connection to read from.",
+                },
                 wait: {
                   type: "boolean",
-                  description: "If true, waits until the full response is generated before returning. If false, returns immediately with the current buffer.",
+                  description: "If true, waits until the full response is generated before returning.",
                 },
               },
+              required: ["connectionId"],
+            },
+          },
+          {
+            name: "list_connections",
+            description: "List all active ACP connections and their status.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
+          {
+            name: "close_connection",
+            description: "Close a specific ACP connection.",
+            inputSchema: {
+              type: "object",
+              properties: {
+                connectionId: {
+                  type: "string",
+                  description: "The ID of the connection to close.",
+                },
+              },
+              required: ["connectionId"],
             },
           },
         ],
@@ -109,7 +148,7 @@ export class ACPServer {
 
       try {
         if (name === "initialize_client") {
-          const { agent, cwd, env, authMethodId } = args as any;
+          const { agent, connectionId, cwd, env, authMethodId } = args as any;
 
           const config = PRECONFIGURED_AGENTS[agent];
           if (!config) {
@@ -118,86 +157,98 @@ export class ACPServer {
 
           const finalCwd = cwd || config.defaultCwd || process.cwd();
 
-          if (this.childProcess) {
-            this.childProcess.kill();
-            this.childProcess = null;
+          // Cleanup existing connection with same ID
+          const existing = this.connections.get(connectionId);
+          if (existing) {
+            existing.childProcess.kill();
+            this.connections.delete(connectionId);
           }
           
           const spawnEnv = { ...process.env, ...(env || {}) };
-
-          this.childProcess = spawn(config.command, config.args, {
+          const childProcess = spawn(config.command, config.args, {
             cwd: finalCwd,
             env: spawnEnv,
             stdio: ["pipe", "pipe", "inherit"],
           });
 
-          const webStdout = Readable.toWeb(this.childProcess.stdout!) as ReadableStream<Uint8Array>;
-          const webStdin = Writable.toWeb(this.childProcess.stdin!) as WritableStream<Uint8Array>;
+          const webStdout = Readable.toWeb(childProcess.stdout!) as ReadableStream<Uint8Array>;
+          const webStdin = Writable.toWeb(childProcess.stdin!) as WritableStream<Uint8Array>;
 
           const stream = ndJsonStream(webStdin, webStdout);
+          const clientHandler = new ACPClientHandler();
+          const connection = new ClientSideConnection((_) => clientHandler.getClientImpl(), stream);
 
-          this.connection = new ClientSideConnection((_) => this.clientHandler.getClientImpl(), stream);
-
-          await this.connection.initialize({
+          await connection.initialize({
             protocolVersion: PROTOCOL_VERSION,
             clientCapabilities: {},
-            clientInfo: { name: "acp-mcp-server", version: "1.0.0" }
+            clientInfo: { name: "mcp-acp-bridge", version: "1.1.0" }
           });
 
           if (authMethodId) {
-            await this.connection.authenticate({ methodId: authMethodId });
+            await connection.authenticate({ methodId: authMethodId });
           }
 
-          const sessionResponse = await this.connection.newSession({
+          const sessionResponse = await connection.newSession({
             cwd: finalCwd,
             mcpServers: []
           });
 
-          this.currentSessionId = sessionResponse.sessionId;
-          this.clientHandler.resetBuffer();
-          this.isGenerating = false;
-          this.generatePromise = null;
-          this.currentError = null;
+          const state: ACPConnectionState = {
+            connectionId,
+            agentName: agent,
+            cwd: finalCwd,
+            childProcess,
+            connection,
+            sessionId: sessionResponse.sessionId,
+            clientHandler,
+            isGenerating: false,
+            currentError: null,
+            generatePromise: null,
+          };
+
+          this.connections.set(connectionId, state);
 
           return {
-            content: [{ type: "text", text: `Client initialized successfully for agent: ${agent} (Command: ${config.command} ${config.args.join(" ")})` }],
+            content: [{ type: "text", text: `Client '${connectionId}' initialized successfully for agent: ${agent} (CWD: ${finalCwd})` }],
           };
         }
 
         if (name === "send_prompt") {
-          if (!this.connection || !this.currentSessionId) {
-            throw new Error("Client not initialized. Call initialize_client first.");
+          const { connectionId, prompt, wait = false } = args as any;
+          const state = this.connections.get(connectionId);
+          
+          if (!state) {
+            throw new Error(`Connection '${connectionId}' not found. Call initialize_client first.`);
           }
 
-          if (this.isGenerating) {
-            throw new Error("A generation is already in progress. Wait for it to finish before sending a new prompt.");
+          if (state.isGenerating) {
+            throw new Error(`Connection '${connectionId}' is already in progress. Wait for it to finish.`);
           }
 
-          const { prompt, wait = false } = args as any;
-          this.clientHandler.resetBuffer();
-          this.isGenerating = true;
-          this.currentError = null;
+          state.clientHandler.resetBuffer();
+          state.isGenerating = true;
+          state.currentError = null;
 
           // Start the stream asynchronously
-          this.generatePromise = (async () => {
+          state.generatePromise = (async () => {
             try {
-              await this.connection!.prompt({
-                sessionId: this.currentSessionId!,
+              await state.connection.prompt({
+                sessionId: state.sessionId,
                 prompt: [{ type: "text", text: prompt }]
               });
             } catch (err: any) {
-              this.currentError = err.message || String(err);
+              state.currentError = err.message || String(err);
             } finally {
-              this.isGenerating = false;
+              state.isGenerating = false;
             }
           })();
 
           if (wait) {
-            await this.generatePromise;
-            const status = this.currentError ? "error" : "complete";
-            let text = `Status: ${status}\n\nResponse:\n${this.clientHandler.responseBuffer}`;
-            if (this.currentError) {
-              text += `\n\nError: ${this.currentError}`;
+            await state.generatePromise;
+            const status = state.currentError ? "error" : "complete";
+            let text = `Status: ${status}\n\nResponse:\n${state.clientHandler.responseBuffer}`;
+            if (state.currentError) {
+              text += `\n\nError: ${state.currentError}`;
             }
             return {
               content: [{ type: "text", text }],
@@ -205,27 +256,62 @@ export class ACPServer {
           }
 
           return {
-            content: [{ type: "text", text: "Prompt sent successfully. Generation started in the background. Use read_response to view." }],
+            content: [{ type: "text", text: `Prompt sent to '${connectionId}'. Use read_response to view.` }],
           };
         }
 
         if (name === "read_response") {
-          const { wait = false } = (args || {}) as any;
-
-          if (wait && this.generatePromise) {
-            await this.generatePromise;
+          const { connectionId, wait = false } = args as any;
+          const state = this.connections.get(connectionId);
+          
+          if (!state) {
+            throw new Error(`Connection '${connectionId}' not found.`);
           }
 
-          const status = this.isGenerating ? "generating" : (this.currentError ? "error" : "complete");
-          let text = `Status: ${status}\n\nResponse:\n${this.clientHandler.responseBuffer}`;
+          if (wait && state.generatePromise) {
+            await state.generatePromise;
+          }
 
-          if (this.currentError) {
-            text += `\n\nError: ${this.currentError}`;
+          const status = state.isGenerating ? "generating" : (state.currentError ? "error" : "complete");
+          let text = `Status: ${status}\n\nResponse:\n${state.clientHandler.responseBuffer}`;
+
+          if (state.currentError) {
+            text += `\n\nError: ${state.currentError}`;
           }
 
           return {
             content: [{ type: "text", text }],
           };
+        }
+
+        if (name === "list_connections") {
+          if (this.connections.size === 0) {
+            return {
+              content: [{ type: "text", text: "No active connections." }],
+            };
+          }
+
+          const lines = Array.from(this.connections.values()).map(s => {
+            const status = s.isGenerating ? "Generating" : (s.currentError ? "Error" : "Idle");
+            return `- ${s.connectionId} (${s.agentName}): ${status} | CWD: ${s.cwd}`;
+          });
+
+          return {
+            content: [{ type: "text", text: `Active Connections:\n${lines.join("\n")}` }],
+          };
+        }
+
+        if (name === "close_connection") {
+          const { connectionId } = args as any;
+          const state = this.connections.get(connectionId);
+          if (state) {
+            state.childProcess.kill();
+            this.connections.delete(connectionId);
+            return {
+              content: [{ type: "text", text: `Connection '${connectionId}' closed.` }],
+            };
+          }
+          throw new Error(`Connection '${connectionId}' not found.`);
         }
 
         throw new Error(`Unknown tool: ${name}`);
@@ -239,9 +325,14 @@ export class ACPServer {
   }
 
   private setupCleanup() {
-    process.on("SIGINT", () => {
-      if (this.childProcess) this.childProcess.kill();
+    const cleanup = () => {
+      for (const state of this.connections.values()) {
+        state.childProcess.kill();
+      }
+      this.connections.clear();
       process.exit(0);
-    });
+    };
+    process.on("SIGINT", cleanup);
+    process.on("SIGTERM", cleanup);
   }
 }
