@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "acp-gemini": {
-      "command": "bun",
-      "args": ["run", "index.ts"]
-    }
-  }
-}
