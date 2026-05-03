@@ -20,14 +20,16 @@ export class ACPClientHandler {
           if (chunk.type === "text" && chunk.text) {
             this.responseBuffer += chunk.text;
           }
-        } else if (params.update.sessionUpdate === "tool_call_update") {
+        } else if (params.update.sessionUpdate === "tool_call" || params.update.sessionUpdate === "tool_call_update") {
           const update = params.update;
           const status = update.status || "updating";
-          const title = update.title || "unnamed tool";
           
-          const logEntry = `[Tool: ${title} | Status: ${status}]`;
+          // Extract tool name from toolCallId (e.g. "list_directory-123" -> "list_directory")
+          const toolName = update.toolCallId.split("-")[0] || "unknown_tool";
+          const title = update.title ? ` (${update.title})` : "";
           
-          // Only add to log if it's a state change or new tool
+          const logEntry = `[Tool: ${toolName}${title} | Status: ${status}]`;
+          
           if (!this.toolLogs.includes(logEntry)) {
             this.toolLogs.push(logEntry);
             this.responseBuffer += `\n${logEntry}\n`;
