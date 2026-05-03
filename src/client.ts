@@ -2,12 +2,12 @@ import { Client } from "@agentclientprotocol/sdk";
 
 export class ACPClientHandler {
   public responseBuffer = "";
+  public toolLogs: string[] = [];
 
   public getClientImpl(): Client {
     return {
       requestPermission: async (params) => {
         if (params.options && params.options.length > 0) {
-          // Find an accept/allow option if we want to auto-allow, or just pick the first one.
           const acceptOption =
             params.options.find((o: any) => o.kind === "accept" || o.kind === "allow") || params.options[0];
           return { outcome: { outcome: "selected", optionId: acceptOption.optionId } };
@@ -22,8 +22,15 @@ export class ACPClientHandler {
           }
         } else if (params.update.sessionUpdate === "tool_call_update") {
           const update = params.update;
-          if (update.status === "in_progress") {
-            this.responseBuffer += `\n[Tool call: ${update.title}]\n`;
+          const status = update.status || "updating";
+          const title = update.title || "unnamed tool";
+          
+          const logEntry = `[Tool: ${title} | Status: ${status}]`;
+          
+          // Only add to log if it's a state change or new tool
+          if (!this.toolLogs.includes(logEntry)) {
+            this.toolLogs.push(logEntry);
+            this.responseBuffer += `\n${logEntry}\n`;
           }
         }
       },
@@ -32,5 +39,6 @@ export class ACPClientHandler {
 
   public resetBuffer() {
     this.responseBuffer = "";
+    this.toolLogs = [];
   }
 }

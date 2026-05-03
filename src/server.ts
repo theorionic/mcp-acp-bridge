@@ -34,7 +34,7 @@ export class ACPServer {
     this.server = new Server(
       {
         name: "mcp-acp-bridge",
-        version: "1.2.0",
+        version: "1.1.4",
       },
       {
         capabilities: {
@@ -116,7 +116,7 @@ export class ACPServer {
           },
           {
             name: "read_response",
-            description: "Read the current buffered response from a specific agent.",
+            description: "Read the current buffered response from a specific agent. This returns instantly even if the agent is still working.",
             inputSchema: {
               type: "object",
               properties: {
@@ -155,7 +155,7 @@ export class ACPServer {
       };
     });
 
-    // 2. Prompt Handlers (2 'Tools' in list - Standard MCP)
+    // 2. Prompt Handlers (Standard MCP)
     this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
       return {
         prompts: [
@@ -182,7 +182,7 @@ export class ACPServer {
       throw new Error("Prompt not found");
     });
 
-    // 3. Resource Handlers (2 'Tools' in list - Standard MCP)
+    // 3. Resource Handlers (Standard MCP)
     this.server.setRequestHandler(ListResourcesRequestSchema, async () => {
       return { resources: [] };
     });
@@ -203,7 +203,6 @@ export class ACPServer {
 
           const finalCwd = cwd || config.defaultCwd || process.cwd();
           
-          // Cleanup existing
           const existing = this.connections.get(connectionId);
           if (existing) {
             existing.childProcess.kill();
@@ -225,7 +224,7 @@ export class ACPServer {
           await connection.initialize({
             protocolVersion: PROTOCOL_VERSION,
             clientCapabilities: {},
-            clientInfo: { name: "mcp-acp-bridge", version: "1.2.0" }
+            clientInfo: { name: "mcp-acp-bridge", version: "1.1.4" }
           });
 
           if (authMethodId) await connection.authenticate({ methodId: authMethodId });
@@ -266,11 +265,10 @@ export class ACPServer {
 
           if (wait) {
             await state.generatePromise;
-            const status = state.currentError ? "error" : "complete";
             return { 
               content: [{ 
                 type: "text", 
-                text: `Status: ${status}\n\nResponse:\n${state.clientHandler.responseBuffer}${state.currentError ? `\nError: ${state.currentError}` : ""}` 
+                text: this.formatResponse(state)
               }] 
             };
           }
@@ -284,11 +282,7 @@ export class ACPServer {
           
           if (wait && state.generatePromise) await state.generatePromise;
           
-          const status = state.isGenerating ? "generating" : (state.currentError ? "error" : "complete");
-          let text = `Status: ${status}\n\nResponse:\n${state.clientHandler.responseBuffer}`;
-          if (state.currentError) text += `\n\nError: ${state.currentError}`;
-          
-          return { content: [{ type: "text", text }] };
+          return { content: [{ type: "text", text: this.formatResponse(state) }] };
         }
 
         if (name === "list_connections") {
@@ -311,6 +305,24 @@ export class ACPServer {
         return { isError: true, content: [{ type: "text", text: err.message || String(err) }] };
       }
     });
+  }
+
+  private formatResponse(state: ACPConnectionState): string {
+    const status = state.isGenerating ? "generating" : (state.currentError ? "error" : "complete");
+    
+    let text = `Status: ${status}\n`;
+    
+    if (state.clientHandler.toolLogs.length > 0) {
+      text += `\nActivity Log:\n${state.clientHandler.toolLogs.map(l => "  " + l).join("\n")}\n`;
+    }
+    
+    text += `\nResponse Buffer:\n${state.clientHandler.responseBuffer || "(empty)"}`;
+    
+    if (state.currentError) {
+      text += `\n\nError: ${state.currentError}`;
+    }
+    
+    return text;
   }
 
   private setupCleanup() {
