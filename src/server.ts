@@ -210,9 +210,20 @@ export class ACPServer {
           }
           
           const combinedArgs = [...config.args, ...extraArgs];
+          const spawnEnv = { ...process.env, ...(env || {}) };
+
+          // Explicitly merge system PATH to ensure binaries are accessible
+          const systemPath = process.env.PATH || process.env.Path;
+          if (systemPath) {
+            const pathKey = process.platform === "win32" ? "Path" : "PATH";
+            const userPath = (env || {})[pathKey];
+            const separator = process.platform === "win32" ? ";" : ":";
+            spawnEnv[pathKey] = userPath ? `${userPath}${separator}${systemPath}` : systemPath;
+          }
+
           const childProcess = spawn(config.command, combinedArgs, {
             cwd: finalCwd,
-            env: { ...process.env, ...(env || {}) },
+            env: spawnEnv,
             stdio: ["pipe", "pipe", "inherit"],
           });
 

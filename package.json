@@ -1,6 +1,6 @@
 {
   "name": "@theorionic/mcp-acp-bridge",
-  "version": "1.1.5",
+  "version": "1.1.6",
   "description": "A stateful Model Context Protocol (MCP) server that acts as a bridge to interact with Agent Client Protocol (ACP) agents.",
   "type": "module",
   "main": "dist/index.js",
