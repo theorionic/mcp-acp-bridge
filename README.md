@@ -58,11 +58,7 @@ When calling `initialize_client`, use the following `agent` keys:
 | Agent Key | Command Used | Requirements / Setup |
 |-----------|--------------|----------------------|
 | `gemini` | `gemini --acp` | Install Gemini CLI: `npm install -g @google/gemini-cli` |
-| `claude-code` | `npx -y @zed-industries/claude-code-acp` | Requires `claude` CLI installed and authenticated. |
-| `opencode` | `opencode acp` | Install OpenCode: `npm install -g opencode` |
-| `codex` | `codex-acp` | Install Codex ACP: `cargo install codex-acp` or use `npx @zed-industries/codex-acp` |
-| `pi` | `pi-acp` | Install Pi: See [pi-acp](https://github.com/theorionic/pi-acp) |
-| `aider` | `aider --acp` | Install Aider: `pip install aider-chat` (ensure version supports `--acp`) |
+| `opencode` | `opencode acp` | Install OpenCode: `npm install -g opencode-ai` |
 
 ### 3. Adding to Specific AI Agents
 

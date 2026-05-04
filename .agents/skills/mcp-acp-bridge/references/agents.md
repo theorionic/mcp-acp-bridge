@@ -5,11 +5,7 @@ The `mcp-acp-bridge` server supports the following agents out of the box:
 | Agent Name | Command | Default Args |
 | :--- | :--- | :--- |
 | `gemini` | `gemini` | `["--acp"]` |
-| `claude-code` | `claude-code-acp` | `[]` |
-| `opencode` | `opencode` | `["--acp"]` |
-| `codex` | `codex` | `["--acp"]` |
-| `pi` | `pi` | `["--acp"]` |
-| `aider` | `aider` | `["--acp"]` |
+| `opencode` | `opencode` | `["acp"]` |
 
 ## Customizing Agents
 

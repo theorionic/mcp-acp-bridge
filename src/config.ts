@@ -2,31 +2,18 @@ export interface AgentConfig {
   command: string;
   args: string[];
   defaultCwd?: string;
+  installInstructions: string;
 }
 
 export const PRECONFIGURED_AGENTS: Record<string, AgentConfig> = {
   gemini: {
     command: "gemini",
     args: ["--acp"],
-  },
-  "claude-code": {
-    command: "claude-code-acp",
-    args: [],
+    installInstructions: "npm install -g @google/gemini-cli",
   },
   "opencode": {
     command: "opencode",
-    args: ["--acp"],
-  },
-  "codex": {
-    command: "codex",
-    args: ["--acp"],
-  },
-  "pi": {
-    command: "pi",
-    args: ["--acp"],
-  },
-  "aider": {
-    command: "aider",
-    args: ["--acp"],
+    args: ["acp"],
+    installInstructions: "npm install -g opencode-ai",
   },
 };

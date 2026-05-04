@@ -7,11 +7,20 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
-import { spawn, ChildProcess } from "child_process";
+import { spawn, ChildProcess, execSync } from "child_process";
 import { Readable, Writable } from "stream";
 import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION, SessionId } from "@agentclientprotocol/sdk";
 import { PRECONFIGURED_AGENTS } from "./config.js";
 import { ACPClientHandler } from "./client.js";
+
+function checkBinaryExists(command: string): boolean {
+  try {
+    execSync(`command -v ${command}`, { stdio: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 interface ACPConnectionState {
   connectionId: string;
@@ -200,6 +209,13 @@ export class ACPServer {
           const { agent, connectionId, cwd, extraArgs = [], env, authMethodId } = args as any;
           const config = PRECONFIGURED_AGENTS[agent];
           if (!config) throw new Error(`Agent '${agent}' not found. Available: ${Object.keys(PRECONFIGURED_AGENTS).join(", ")}`);
+
+          if (!checkBinaryExists(config.command)) {
+            throw new Error(
+              `Binary '${config.command}' for agent '${agent}' not found in PATH.\n` +
+              `To install it, run: ${config.installInstructions}`
+            );
+          }
 
           const finalCwd = cwd || config.defaultCwd || process.cwd();
           
