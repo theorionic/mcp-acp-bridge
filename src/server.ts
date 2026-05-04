@@ -7,7 +7,7 @@ import {
   ListResourcesRequestSchema,
   ReadResourceRequestSchema
 } from "@modelcontextprotocol/sdk/types.js";
-import { spawn, ChildProcess, execSync } from "child_process";
+import { spawn, ChildProcess } from "child_process";
 import { Readable, Writable } from "stream";
 import { ClientSideConnection, ndJsonStream, PROTOCOL_VERSION, SessionId } from "@agentclientprotocol/sdk";
 import { PRECONFIGURED_AGENTS } from "./config.js";
@@ -29,13 +29,12 @@ interface ACPConnectionState {
 export class ACPServer {
   public server: Server;
   private connections = new Map<string, ACPConnectionState>();
-  private discoveredPath: string | null = null;
 
   constructor() {
     this.server = new Server(
       {
         name: "mcp-acp-bridge",
-        version: "1.1.7",
+        version: "1.1.8",
       },
       {
         capabilities: {
@@ -46,46 +45,8 @@ export class ACPServer {
       }
     );
 
-    this.tryDiscoverShellPath();
     this.setupHandlers();
     this.setupCleanup();
-  }
-
-  private tryDiscoverShellPath() {
-    if (process.platform === "win32") {
-      this.discoveredPath = process.env.PATH || process.env.Path || null;
-      return;
-    }
-
-    const paths = new Set<string>();
-    
-    // 1. Add current process PATH
-    if (process.env.PATH) {
-      process.env.PATH.split(":").forEach(p => paths.add(p));
-    }
-
-    const shell = process.env.SHELL || "/bin/bash";
-
-    // 2. Try Login Shell (-l)
-    try {
-      const loginPath = execSync(`${shell} -l -c "echo $PATH"`, { 
-        encoding: "utf8", timeout: 2000, env: { ...process.env, TERM: "dumb" } 
-      }).trim();
-      if (loginPath) loginPath.split(":").forEach(p => paths.add(p));
-    } catch (e) {}
-
-    // 3. Try Interactive Shell (-i) - Often picks up .bashrc
-    try {
-      const interactivePath = execSync(`${shell} -i -c "echo $PATH"`, { 
-        encoding: "utf8", timeout: 2000, env: { ...process.env, TERM: "dumb" } 
-      }).trim();
-      if (interactivePath) interactivePath.split(":").forEach(p => paths.add(p));
-    } catch (e) {}
-
-    const finalPath = Array.from(paths).filter(p => p.length > 0).join(":");
-    if (finalPath) {
-      this.discoveredPath = finalPath;
-    }
   }
 
   private setupHandlers() {
@@ -251,16 +212,6 @@ export class ACPServer {
           const combinedArgs = [...config.args, ...extraArgs];
           const spawnEnv = { ...process.env, ...(env || {}) };
 
-          // Use discovered PATH if available, otherwise fallback to process.env.PATH
-          const systemPath = this.discoveredPath || process.env.PATH || process.env.Path;
-          if (systemPath) {
-            const pathKey = process.platform === "win32" ? "Path" : "PATH";
-            const userPath = (env || {})[pathKey];
-            const separator = process.platform === "win32" ? ";" : ":";
-            // Prepend user path, then append discovered system path
-            spawnEnv[pathKey] = userPath ? `${userPath}${separator}${systemPath}` : systemPath;
-          }
-
           const childProcess = spawn(config.command, combinedArgs, {
             cwd: finalCwd,
             env: spawnEnv,
@@ -275,7 +226,7 @@ export class ACPServer {
           await connection.initialize({
             protocolVersion: PROTOCOL_VERSION,
             clientCapabilities: {},
-            clientInfo: { name: "mcp-acp-bridge", version: "1.1.7" }
+            clientInfo: { name: "mcp-acp-bridge", version: "1.1.8" }
           });
 
           if (authMethodId) await connection.authenticate({ methodId: authMethodId });
