@@ -14,6 +14,7 @@
     "build": "bun build ./src/index.ts --outdir dist --target node --minify && sed -i '1i#!/usr/bin/env node' dist/index.js && chmod +x dist/index.js",
     "start": "if [ -f dist/index.js ]; then node dist/index.js; elif command -v bun > /dev/null; then bun run src/index.ts; else npx tsx src/index.ts; fi",
     "dev": "bun run src/index.ts",
+    "test:flow": "bun run scripts/test-flow.ts",
     "prepublishOnly": "bun run build"
   },
   "repository": {

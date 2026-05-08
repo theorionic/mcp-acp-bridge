@@ -22,6 +22,35 @@ function checkBinaryExists(command: string): boolean {
   }
 }
 
+const INIT_TIMEOUT_MS = 15000;
+
+function debugLog(message: string, data?: any) {
+  if (process.env.BRIDGE_DEBUG === "true") {
+    const timestamp = new Date().toISOString();
+    const logMessage = `[${timestamp}] DEBUG: ${message}`;
+    if (data) {
+      console.error(`${logMessage} ${JSON.stringify(data, null, 2)}`);
+    } else {
+      console.error(logMessage);
+    }
+  }
+}
+
+async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`Initialization timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
 interface ACPConnectionState {
   connectionId: string;
   agentName: string;
@@ -228,44 +257,74 @@ export class ACPServer {
           const combinedArgs = [...config.args, ...extraArgs];
           const spawnEnv = { ...process.env, ...(env || {}) };
 
+          debugLog(`Initializing agent: ${agent}`, { connectionId, command: config.command, combinedArgs, cwd: finalCwd });
+
           const childProcess = spawn(config.command, combinedArgs, {
             cwd: finalCwd,
             env: spawnEnv,
             stdio: ["pipe", "pipe", "inherit"],
           });
 
-          const webStdout = Readable.toWeb(childProcess.stdout!) as ReadableStream<Uint8Array>;
-          const webStdin = Writable.toWeb(childProcess.stdin!) as WritableStream<Uint8Array>;
-          const clientHandler = new ACPClientHandler();
-          const connection = new ClientSideConnection((_) => clientHandler.getClientImpl(), ndJsonStream(webStdin, webStdout));
-
-          await connection.initialize({
-            protocolVersion: PROTOCOL_VERSION,
-            clientCapabilities: {},
-            clientInfo: { name: "mcp-acp-bridge", version: "1.1.8" }
+          childProcess.on("error", (err) => {
+            debugLog(`Child process spawn error for ${connectionId}:`, err);
           });
 
-          if (authMethodId) await connection.authenticate({ methodId: authMethodId });
-          const sessionResponse = await connection.newSession({ cwd: finalCwd, mcpServers: [] });
-
-          this.connections.set(connectionId, {
-            connectionId, agentName: agent, cwd: finalCwd, childProcess, connection,
-            sessionId: sessionResponse.sessionId, clientHandler, isGenerating: false,
-            currentError: null, generatePromise: null,
+          childProcess.on("exit", (code, signal) => {
+            debugLog(`Child process exited for ${connectionId}:`, { code, signal });
           });
 
-          return { 
-            content: [{ 
-              type: "text", 
-              text: `Client '${connectionId}' initialized successfully for ${agent}.\nCommand: ${config.command} ${combinedArgs.join(" ")}` 
-            }] 
-          };
+          try {
+            debugLog(`Starting ACP handshake for ${connectionId}...`);
+            const webStdout = Readable.toWeb(childProcess.stdout!) as ReadableStream<Uint8Array>;
+            const webStdin = Writable.toWeb(childProcess.stdin!) as WritableStream<Uint8Array>;
+            const clientHandler = new ACPClientHandler();
+            const connection = new ClientSideConnection((_) => clientHandler.getClientImpl(), ndJsonStream(webStdin, webStdout));
+
+            const initializeAndCreateSession = async () => {
+              debugLog(`Connecting to ACP protocol version ${PROTOCOL_VERSION}...`);
+              await connection.initialize({
+                protocolVersion: PROTOCOL_VERSION,
+                clientCapabilities: {},
+                clientInfo: { name: "mcp-acp-bridge", version: "1.1.8" }
+              });
+
+              if (authMethodId) {
+                debugLog(`Authenticating with method: ${authMethodId}`);
+                await connection.authenticate({ methodId: authMethodId });
+              }
+
+              debugLog(`Creating new ACP session for ${connectionId}...`);
+              return await connection.newSession({ cwd: finalCwd, mcpServers: [] });
+            };
+
+            const sessionResponse = await withTimeout(initializeAndCreateSession(), INIT_TIMEOUT_MS);
+            debugLog(`ACP Session created successfully for ${connectionId}:`, { sessionId: sessionResponse.sessionId });
+
+            this.connections.set(connectionId, {
+              connectionId, agentName: agent, cwd: finalCwd, childProcess, connection,
+              sessionId: sessionResponse.sessionId, clientHandler, isGenerating: false,
+              currentError: null, generatePromise: null,
+            });
+
+            return { 
+              content: [{ 
+                type: "text", 
+                text: `Client '${connectionId}' initialized successfully for ${agent}.\nCommand: ${config.command} ${combinedArgs.join(" ")}` 
+              }] 
+            };
+          } catch (error: any) {
+            debugLog(`Initialization failed for ${connectionId}, killing process.`, { error: error.message });
+            childProcess.kill("SIGKILL");
+            throw new Error(`Failed to initialize agent '${agent}': ${error.message}`);
+          }
         }
 
         if (name === "send_prompt") {
           const { connectionId, prompt, wait = false } = args as any;
           const state = this.connections.get(connectionId);
           if (!state) throw new Error(`Connection '${connectionId}' not found.`);
+
+          debugLog(`Sending prompt to ${connectionId} (wait=${wait})`, { promptLength: prompt.length });
           if (state.isGenerating) throw new Error(`Agent is currently generating. Wait for it to finish.`);
 
           state.clientHandler.resetBuffer();
