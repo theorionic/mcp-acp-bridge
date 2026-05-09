@@ -1,0 +1,9 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "ACP": {
+      "type": "local",
+      "command": ["bun", "/home/dev/acp-gemini/src/index.ts"],
+    },
+  },
+}
