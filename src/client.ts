@@ -91,10 +91,11 @@ export class ACPClientHandler {
           const update = params.update;
           const status = update.status || "updating";
 
-          const toolName = update.toolCallId?.split("-")[0] || "unknown_tool";
-          const title = update.title ? ` (${update.title})` : "";
+          const isOpaqueId = update.toolCallId?.startsWith("call_");
+          const toolName = (isOpaqueId && update.title) ? update.title : (update.toolCallId?.split("-")[0] || "unknown_tool");
+          const titleSuffix = (update.title && !isOpaqueId) ? ` (${update.title})` : (isOpaqueId ? ` (${update.toolCallId})` : "");
 
-          const logEntry = `[Tool: ${toolName}${title} | Status: ${status}]`;
+          const logEntry = `[Tool: ${toolName}${titleSuffix} | Status: ${status}]`;
 
           // Update tool call details map
           const existingDetail = this.toolCallDetails.get(update.toolCallId);
@@ -107,7 +108,7 @@ export class ACPClientHandler {
           } else {
             this.toolCallDetails.set(update.toolCallId, {
               toolCallId: update.toolCallId,
-              toolName: title ? update.title! : toolName,
+              toolName: isOpaqueId && update.title ? update.title : toolName,
               status,
               startedAt: Date.now(),
               completedAt: status === "complete" || status === "error" ? Date.now() : null,

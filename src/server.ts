@@ -18,7 +18,7 @@ function checkBinaryExists(command: string): boolean {
   }
 }
 
-const INIT_TIMEOUT_MS = 15000;
+const INIT_TIMEOUT_MS = 30000;
 
 function debugLog(message: string, data?: any) {
   if (process.env.BRIDGE_DEBUG === "true") {
@@ -71,7 +71,7 @@ export class ACPServer {
     this.server = new Server(
       {
         name: "mcp-acp-bridge",
-        version: "1.2.1",
+        version: "1.2.2",
       },
       {
         capabilities: {
@@ -313,6 +313,19 @@ export class ACPServer {
       );
     }
 
+    if (toolApprovalMode === "manual" && config.supportsManualApproval === false) {
+      throw new Error(`Agent '${agent}' does not support manual tool approval mode via the ACP protocol.`);
+    }
+
+    if (extraArgs.length > 0 && config.unsupportedArgs) {
+      const invalidArgs = extraArgs.filter(arg => 
+        config.unsupportedArgs?.some(unsupported => arg.startsWith(unsupported))
+      );
+      if (invalidArgs.length > 0) {
+        throw new Error(`Agent '${agent}' does not support the following arguments: ${invalidArgs.join(", ")}`);
+      }
+    }
+
     const finalCwd = cwd || config.defaultCwd || process.cwd();
 
     const existing = this.connections.get(connectionId);
@@ -368,7 +381,7 @@ export class ACPServer {
         await connection.initialize({
           protocolVersion: PROTOCOL_VERSION,
           clientCapabilities: {},
-          clientInfo: { name: "mcp-acp-bridge", version: "1.2.1" }
+          clientInfo: { name: "mcp-acp-bridge", version: "1.2.2" }
         });
 
         if (authMethodId) {
